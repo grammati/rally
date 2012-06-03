@@ -17,6 +17,22 @@ class SpiralTest(unittest.TestCase):
 16 15 14 13 12 
 """, spiral.string(25))
 
+        # Invalid input
+        self.assertRaises(Exception, spiral.string, -1)
+
+        # Imperfect numbers as input (not an odd square)
+        self.assertEqual("""6 7 * 
+5 0 1 
+4 3 2 
+""", spiral.string(8))
+
+        self.assertEqual("""* * * 
+* 0 1 
+4 3 2 
+""", spiral.string(5))
+
+
+
 
 if __name__ == '__main__':
     unittest.main()
