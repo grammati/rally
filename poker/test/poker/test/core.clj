@@ -30,10 +30,10 @@
   (is (= [9] (p/match-high-card (h "2c 8s 9c 6h 5d")))))
 
 (deftest test-pair
-  (is (= [12] (p/match-pair (h "Qh Ad Ks Qd 3c")))))
+  (is (= [12] (p/match-one-pair (h "Qh Ad Ks Qd 3c")))))
 
 (deftest test-two-pair
-  (is (= [14 7] (p/match-two-pair (h "7c Ad 7h 9s 7d")))))
+  (is (= [14 7] (p/match-two-pair (h "7c Ad Ah 9s 7d")))))
 
 (deftest test-tree-of-a-kind
   (is (= [6] (p/match-three-of-a-kind (h "As 6c 6d 7h 6h")))))
@@ -59,6 +59,33 @@
   (is (= [11] (p/match-straight (h "Jc 7c 9c 8c 10c"))))
   (is (= [14] (p/match-straight (h "10s As Qs Ks Js"))))
   (is (= [5]  (p/match-straight (h "Ad 2d 5d 3d 4d"))))
+  )
+
+
+(defn game-rank [players-and-hands]
+  (->> players-and-hands
+       (map (fn [[player hand]]
+              {:name player :score (p/value (h hand))}))
+       (sort-by :score)
+       (map :name)
+       reverse))
+
+
+(deftest test-poker
+  (let [game [[:adam "As Ks Qs Js 9d"]  ; ace-high
+              [:brad "3c 4s 7h 6d 5c"]  ; straight (value 7)
+              [:carl "Ad 5h 3s 2c 4h"]  ; ace-low straight (value 5)
+              [:doug "8c 8s 8h Kd Jh"]  ; three eights
+              ]]
+    (is (= [:brad :carl :doug :adam] (game-rank game))))
+
+  (let [game [[:adam "10s Ks Qs Js 9d"] ; king-high straight
+              [:brad "6c 4s 5h 6d 5d"]  ; two-pair
+              [:carl "Ac 5c 3c 2c 4c"]  ; straight-flush
+              [:doug "7c 7s 7h Jc Jh"]  ; full-house
+              ]]
+    (is (= [:carl :doug :adam :brad] (game-rank game))))
+
   )
 
 

@@ -1,0 +1,3 @@
+To run the tests:
+1) Install Leiningen (https://github.com/technomancy/leiningen)
+2) lein test

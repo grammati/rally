@@ -1,4 +1,6 @@
-(ns poker.core
+(ns ^{:doc "Functions for scoring poker hands.
+            Disclaimer: Everything I know about poker I learned from  http://en.wikipedia.org/wiki/List_of_poker_hands"}
+  poker.core
   (:require [clojure [string :as s]]))
 
 (defn parse-card
@@ -21,26 +23,9 @@
        (into [])))
 
 
-(def
-  ^{:dynamic true
-    :doc "Assigns a numeric value to each poker hand.
-          Actual values are arbitrary - they are only meaningful relative
-          to each other."}
-  *rankings*
-  {:straight-flush 100
-   :four-of-a-kind 90
-   :full-house 80
-   :flush 70
-   :straight 60
-   :three-of-a-kind 50
-   :two-pair 40
-   :one-pair 30
-   :high-card 20
-   })
-
-
 (defn ranked-groups
-  "Return ranked list of pairs, triples, etc.
+  "Returns a ranked list of pairs, triples, etc. in descending
+   order of value. Pairs are [count card-value].
    Example: (ranked-groups (parse-hand \"5s Ah 5c Kh 5d\")) =>
             [[3 5] [1 14] [1 13]] "
   [hand]
@@ -52,10 +37,11 @@
        reverse))
 
 (defn- match-n-of-a-kind
-  [n hand]
-  (->> hand
-       ranked-groups
-       (filter (fn [[count val]] (= n count)))))
+  [n]
+  (fn [hand]
+   (let [[[count value] & _] (ranked-groups hand)]
+     (if (= n count)
+       [value]))))
 
 
 (defn- match-straight-impl [hand]
@@ -63,7 +49,7 @@
         diffs (for [[a b] (partition 2 1 vals)]
                 (- b a))]
     (if (every? #(= 1 %) diffs)
-      [(*rankings* :straight) (last vals)])))
+      [(last vals)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -71,19 +57,16 @@
 ;; order of value.
 
 (defn match-high-card [hand]
-  ())
+  [(apply max (map :value hand))])
 
-(defn match-pair [hand]
-  nil)
+(def match-one-pair (match-n-of-a-kind 2))
 
 (defn match-two-pair [hand]
-  nil)
+  (let [[[c1 v1] [c2 v2] & _] (ranked-groups hand)]
+    (if (= 2 c1 c2)
+      [v1 v2])))
 
-(defn match-three-of-a-kind [hand]
-  (if-let [[_ v] (->> hand
-                      (match-n-of-a-kind 3)
-                      first)]
-    [(*rankings* :three-of-a-kind) v]))
+(def match-three-of-a-kind (match-n-of-a-kind 3))
 
 (defn match-straight [hand]
   (let [ace-low (fn [{:keys [value suit]}]
@@ -92,21 +75,40 @@
         (match-straight-impl (map ace-low hand)))))
 
 (defn match-flush [hand]
-  (apply = (map :suit hand)))
+  (if (apply = (map :suit hand))
+    (match-high-card hand)))
 
 (defn match-full-house [hand]
-  nil)
+  (let [[[c1 v1] [c2 v2] & _] (ranked-groups hand)]
+    (if (and (= 3 c1) (= 2 c2))
+      [v1 v2])))
 
-(defn match-four-of-a-kind [hand]
-  (if-let [[_ v] (->> hand
-                      (match-n-of-a-kind 4)
-                      first)]
-    [(*rankings* :four-of-a-kind) [v]]))
+(def match-four-of-a-kind (match-n-of-a-kind 4))
 
 (defn match-straight-flush [hand]
-  (if-let [[_ high-card] (and (match-flush hand) (match-straight hand))]
-    [(*rankings* :straight-flush) high-card]))
+  (and (match-flush hand) (match-straight hand)))
 
+
+(def
+  ^{:doc "Assigns a numeric value to each hand in standard poker rules.
+          Actual values are arbitrary - they are only meaningful relative
+          to each other."}
+  standard-poker
+  [{:value 100 :matcher match-straight-flush}
+   {:value 90  :matcher match-four-of-a-kind}
+   {:value 80  :matcher match-full-house}
+   {:value 70  :matcher match-flush}
+   {:value 60  :matcher match-straight}
+   {:value 50  :matcher match-three-of-a-kind}
+   {:value 40  :matcher match-two-pair}
+   {:value 30  :matcher match-one-pair}
+   {:value 20  :matcher match-high-card}
+   ])
+
+(def
+  ^{:dynamic true
+    :doc "The current set of poker rules in use."}
+  *game* standard-poker)
 
 (defn value
   "Returns the value of the hand as a vector containing:
@@ -116,16 +118,13 @@
   value [80 [5 11]], while a pair of threes would have [30 [3]].
   Values are represented this way to allow the natural sorting
   order of clojure vectors to properly rank hands."
-  [hand]
-  (let [matchers [match-straight-flush
-                  match-four-of-a-kind
-                  match-full-house
-                  match-flush
-                  match-straight
-                  match-three-of-a-kind
-                  match-two-pair
-                  match-pair
-                  match-high-card
-                  ]
-        matches (remove nil? (for [m matchers] (m hand)))]
-    (first matches)))
+  ([hand]
+     (value hand *game*))
+  ([hand game]
+     ;; Sort game-rules in descending order of value. Try matching
+     ;; rules to the hand one at a time until we get a non-nil result.
+     (let [rules (->> *game* (sort-by :value) reverse)]
+       (loop [[{:keys [value matcher]} & rules] rules]
+         (if-let [card-value (matcher hand)]
+           [value card-value]
+           (recur rules))))))
